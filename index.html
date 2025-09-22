@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuizDeck（v250922：固定列＋深色＋DATAURI＋大圖檢視）</title>
+<style>
+:root{
+  --bg:#f8fafc;--fg:#0f172a;--muted:#64748b;--card:#ffffff;--border:#e2e8f0;--accent:#0ea5e9;
+  --good-bg:#f0fdf4;--good-bd:#86efac;--good-fg:#166534;
+  --bad-bg:#fff1f2;--bad-bd:#fecaca;--bad-fg:#991b1b;
+}
+.dark{
+  --bg:#0b1220;--fg:#e6edf3;--muted:#94a3b8;--card:#111827;--border:#243244;--accent:#38bdf8;
+  --good-bg:#052e1a;--good-bd:#16a34a;--good-fg:#86efac;
+  --bad-bg:#2a0e12;--bad-bd:#ef4444;--bad-fg:#fecaca;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";transition:background .2s, color .2s}
+header{position:fixed;top:0;left:0;right:0;background:var(--card);border-bottom:1px solid var(--border);z-index:100;backdrop-filter:saturate(1.1)}
+.container{max-width:1000px;margin:0 auto;padding:12px 16px}
+.title{font-weight:700;font-size:20px}
+.btn{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg);cursor:pointer;transition:all .12s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn.active{border-color:var(--accent)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 12px 0}
+.stats{margin-left:auto;font-size:14px;border:1px solid var(--border);background:var(--card);padding:8px 12px;border-radius:10px;color:var(--fg)}
+ul.qs{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
+.qid{color:var(--muted);width:40px;flex:0 0 auto}
+.row{display:flex;gap:12px;align-items:flex-start}
+.stem{font-weight:600;line-height:1.6;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.stem .thumb{width:24px;height:24px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+.thumb-lg{width:96px;height:96px;object-fit:contain;border-radius:12px;border:1px solid var(--border);background:var(--card)}
+.chip{margin-left:8px;font-size:12px;border:1px solid #c7d2fe;color:#c7d2fe;background:transparent;padding:2px 8px;border-radius:999px}
+.options{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.opt{border:1px solid var(--border);border-radius:12px;padding:8px;display:flex;align-items:center;gap:10px}
+.opt.good{border-color:var(--good-bd);background:var(--good-bg);color:var(--good-fg)}
+.opt.bad{border-color:var(--bad-bd);background:var(--bad-bg);color:var(--bad-fg)}
+.mono{width:24px;color:var(--muted)}
+/* image block below options */
+.imgwrap{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.img-inline{max-width:100%;max-height:360px;border:1px solid var(--border);background:var(--card);border-radius:12px;object-fit:contain}
+.img-actions{display:flex;gap:8px;align-items:center}
+.foot{margin-top:10px;display:flex;gap:8px;align-items:center;font-size:14px;flex-wrap:wrap}
+.pill-ok{font-size:12px;border:1px solid var(--good-bd);color:var(--good-fg);background:var(--good-bg);padding:2px 8px;border-radius:8px}
+.pill-ng{font-size:12px;border:1px solid var(--bad-bd);color:var(--bad-fg);background:var(--bad-bg);padding:2px 8px;border-radius:8px}
+.disabled{opacity:.6;pointer-events:none}
+.input{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg)}
+.input.small{width:56px}
+.actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.drop{display:flex;align-items:center;gap:10px;border:1px dashed var(--border);border-radius:12px;padding:10px;background:var(--card)}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.drop .hint{font-size:12px;color:var(--muted)}
+.drop .right{margin-left:auto;display:flex;gap:8px}
+.code{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-size:12px;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:8px;padding:2px 6px}
+input,button{font:inherit;color:inherit}
+main{padding:12px 16px}
+
+/* Lightbox */
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:999}
+.lightbox.show{display:flex}
+.lightbox img{max-width:95vw;max-height:90vh;border-radius:12px;border:1px solid #334155;background:#0b1220}
+.lightbox .close{position:absolute;top:16px;right:16px}
+.lightbox .close .btn{background:#111827;border-color:#334155;color:#e2e8f0}
+</style>
+</head>
+<body>
+<header>
+  <div class="container" style="display:flex;align-items:center;gap:8px;">
+    <div class="title">📘 QuizDeck</div>
+    <div style="margin-left:auto"></div>
+    <button class="btn" id="mode-read">閱讀模式</button>
+    <button class="btn" id="mode-practice">練習模式</button>
+    <button class="btn" id="mode-exam">模考模式</button>
+    <button class="btn" id="mode-edit">編輯模式</button>
+    <button class="btn" id="mode-finish">交卷</button>
+    <button class="btn" id="mode-theme">深色模式</button>
+  </div>
+  <div class="container">
+    <div class="toolbar">
+      <button class="btn" id="btn-random">亂序</button>
+      <button class="btn" id="btn-ordered">不亂序</button>
+      <button class="btn" id="btn-import">匯入JSON</button>
+      <button class="btn" id="btn-export">匯出JSON</button>
+      <button class="btn" id="btn-clear">清空作答</button>
+      <button class="btn" id="btn-add">新增題目</button>
+      <div class="stats" id="stats">題數：—｜已答：—｜答對：—｜正確率：—%</div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <input type="file" id="file" accept="application/json" style="display:none">
+  <ul class="qs" id="qs"></ul>
+</main>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <div class="close"><button class="btn" id="btn-close">關閉（Esc）</button></div>
+  <img id="lightbox-img" alt="full" src="">
+</div>
+
+<script>
+(function(){
+// ---- Theme (persist) ----
+const LS_THEME_KEY = 'quizdeck_theme';
+function applyTheme(theme){
+  const body=document.body;
+  if(theme==='dark'){ body.classList.add('dark'); document.getElementById('mode-theme').textContent='淺色模式'; }
+  else { body.classList.remove('dark'); document.getElementById('mode-theme').textContent='深色模式'; }
+}
+function toggleTheme(){
+  const isDark = document.body.classList.toggle('dark');
+  localStorage.setItem(LS_THEME_KEY, isDark?'dark':'light');
+  applyTheme(isDark?'dark':'light');
+}
+applyTheme(localStorage.getItem(LS_THEME_KEY)||'light');
+
+// ---- Lightbox ----
+const lb = document.getElementById('lightbox');
+const lbImg = document.getElementById('lightbox-img');
+const lbClose = document.getElementById('btn-close');
+function openLightbox(src){ lbImg.src=src; lb.classList.add('show'); }
+function closeLightbox(){ lb.classList.remove('show'); lbImg.src=''; }
+lb.addEventListener('click', (e)=>{ if(e.target===lb) closeLightbox(); });
+lbClose.addEventListener('click', closeLightbox);
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeLightbox(); });
+
+// ---- State ----
+let mode='read', random=false, questions=[],answers={},locked={},finished=false,viewIds=[],freeze=false;
+
+// ---- Reserve space for fixed header ----
+function adjustMainOffset(){
+  const h=document.querySelector('header');
+  const main=document.querySelector('main');
+  if(h && main){ main.style.marginTop = (h.offsetHeight + 8) + 'px'; }
+}
+window.addEventListener('resize', adjustMainOffset);
+
+// ---- Keep-scroll anchor ----
+let scrollAnchor = null; // { qid, relY }
+function headerH(){ const h=document.querySelector('header'); return (h?h.offsetHeight:0)+8; }
+function saveAnchor(){
+  const cards = Array.from(document.querySelectorAll('li.card'));
+  const topLine = headerH();
+  for(const el of cards){
+    const r = el.getBoundingClientRect();
+    if(r.top <= topLine && r.bottom > topLine){
+      const qid = Number(el.dataset.qid);
+      const relY = window.scrollY - el.offsetTop;
+      scrollAnchor = { qid, relY };
+      return;
+    }
+  }
+  if(cards.length){
+    const el = cards[0];
+    scrollAnchor = { qid: Number(el.dataset.qid), relY: window.scrollY - el.offsetTop };
+  }
+}
+function restoreAnchor(){
+  if(!scrollAnchor) return;
+  const el = document.querySelector("li.card[data-qid='" + scrollAnchor.qid + "']");
+  if(el){
+    const y = el.offsetTop + scrollAnchor.relY;
+    window.scrollTo({ top: y, behavior: 'instant' });
+  }
+}
+
+// ---- Utils ----
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function equals(a,b){if(a.size!==b.size)return false;for(const v of a)if(!b.has(v))return false;return true}
+function recomputeOrder(){if(freeze)return;const ids=questions.map(q=>q.id);viewIds=random?shuffle(ids.slice()):ids}
+function dataset(){const map=new Map(questions.map(q=>[q.id,q]));return viewIds.map(id=>map.get(id)).filter(Boolean)}
+function computeStatsRaw(){let ans=0,cor=0;for(const q of questions){const s=new Set(answers[q.id]||[]),c=new Set(q.choices.filter(x=>x.correct).map(x=>x.key));if(s.size>0)ans++;if(equals(s,c))cor++}return{ans,cor}}
+
+// ---- Mode switching preserves anchor (all modes) ----
+function setMode(m){
+  saveAnchor();
+  mode=m; finished=false; freeze=false;
+  ['mode-read','mode-practice','mode-exam','mode-edit'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('mode-'+m).classList.add('active');
+  if(mode==='read'){answers={};locked={};}
+  if(mode!=='practice'){locked={};}
+  document.getElementById('btn-add').disabled = (mode!=='edit');
+  render();
+  restoreAnchor();
+}
+function nextChoiceKey(choices){
+  const keys=choices.map(c=>c.key);
+  const letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for(let i=0;i<letters.length;i++){ if(!keys.includes(letters[i])) return letters[i]; }
+  let n=1; while(keys.includes(String(n))) n++; return String(n);
+}
+function addQuestion(){
+  saveAnchor();
+  const maxId = questions.reduce((m,q)=>Math.max(m, Number(q.id)||0), 0);
+  const newId = maxId + 1;
+  questions.push({id:newId, text:"新題目", datauri:"", choices:[{key:"A",text:"選項1",correct:true},{key:"B",text:"選項2"}], multi:false});
+  viewIds=[]; recomputeOrder(); render(); restoreAnchor();
+}
+function removeQuestion(qid){
+  saveAnchor();
+  const i=questions.findIndex(q=>q.id===qid);
+  if(i>=0){ questions.splice(i,1); delete answers[qid]; delete locked[qid]; viewIds=viewIds.filter(id=>id!==qid); render(); }
+  restoreAnchor();
+}
+function renderStats(){
+  const ds=dataset();
+  const statsEl = document.getElementById('stats');
+  if(mode==='exam' && !finished){
+    statsEl.textContent = "題數："+ds.length+"｜已答：—｜答對：—｜正確率：—%";
+  }else{
+    const st=computeStatsRaw();
+    const acc = ds.length ? Math.round(st.cor/ds.length*100) : 0;
+    statsEl.textContent = "題數："+ds.length+"｜已答："+st.ans+"｜答對："+st.cor+"｜正確率："+acc+"%";
+  }
+}
+
+// ---- Image helpers (edit) ----
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const fr=new FileReader();
+    fr.onload=()=>resolve(fr.result);
+    fr.onerror=()=>reject(fr.error);
+    fr.readAsDataURL(file);
+  });
+}
+function pasteHandlerFactory(q){
+  return async (evt)=>{
+    const items = evt.clipboardData ? evt.clipboardData.items : (evt.dataTransfer ? evt.dataTransfer.items : []);
+    if(!items || !items.length) return;
+    for(const it of items){
+      const type = it.type || (it.kind === 'file' ? 'image/*' : '');
+      if(type && type.startsWith('image/')){
+        evt.preventDefault();
+        const file = it.getAsFile ? it.getAsFile() : (evt.dataTransfer && evt.dataTransfer.files && evt.dataTransfer.files[0]);
+        if(file){
+          const dataurl = await fileToDataURL(file);
+          q.datauri = dataurl;
+          render();
+        }
+        break;
+      }
+    }
+  };
+}
+function attachDropPaste(el,q){
+  const handler = pasteHandlerFactory(q);
+  el.addEventListener('paste', handler);
+  el.addEventListener('drop', (e)=>{ e.preventDefault(); if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]){
+    const f=e.dataTransfer.files[0]; if(f.type && f.type.startsWith('image/')) fileToDataURL(f).then(data=>{ q.datauri=data; render(); });
+  }});
+  el.addEventListener('dragover', (e)=>e.preventDefault());
+}
+
+// ---- Render ----
+function render(){
+  if(!viewIds.length) recomputeOrder();
+  renderStats();
+  adjustMainOffset();
+  const ds=dataset();
+  const qs=document.getElementById('qs'); qs.innerHTML='';
+  ds.forEach((q,idx)=>{
+    const correct=new Set(q.choices.filter(c=>c.correct).map(c=>c.key));
+    const multi=q.multi || correct.size>1;
+    const sel=new Set(answers[q.id]||[]);
+    const done=locked[q.id] || finished;
+    const revealCorrect = (mode==='read') || finished || (mode==='practice' && done);
+    const li=document.createElement('li'); li.className='card'; li.dataset.qid=q.id;
+    const row=document.createElement('div'); row.className='row';
+    const qid=document.createElement('div'); qid.className='qid'; qid.textContent='#'+(idx+1);
+    const body=document.createElement('div'); body.style.flex='1';
+
+    if(mode==='edit'){
+      const stem=document.createElement('div'); stem.className='stem';
+      // 編輯模式保留大縮圖在題幹旁，方便編輯
+      if(q.datauri){
+        const img = document.createElement('img'); img.src=q.datauri; img.alt='thumb'; img.className='thumb-lg';
+        img.style.cursor='zoom-in';
+        img.addEventListener('click', ()=>openLightbox(q.datauri));
+        stem.appendChild(img);
+      }
+      const inputText=document.createElement('input'); inputText.className='input'; inputText.style.width='100%'; inputText.value=q.text;
+      inputText.addEventListener('input', ()=>{ q.text = inputText.value; });
+      stem.appendChild(inputText);
+      const meta=document.createElement('div'); meta.className='actions';
+      const multiToggle=document.createElement('label');
+      const multiChk=document.createElement('input'); multiChk.type='checkbox'; multiChk.checked=!!q.multi;
+      multiChk.addEventListener('change', ()=>{ saveAnchor(); q.multi = multiChk.checked; render(); restoreAnchor(); });
+      multiToggle.appendChild(multiChk); multiToggle.appendChild(document.createTextNode(' 複選(顯示UI用)'));
+      meta.appendChild(multiToggle);
+      body.appendChild(stem);
+
+      const drop=document.createElement('div'); drop.className='drop'; drop.tabIndex=0;
+      const thumb=document.createElement('img'); thumb.className='thumb-lg'; thumb.alt='預覽'; thumb.src=q.datauri||''; if(!q.datauri) thumb.style.display='none';
+      thumb.style.cursor='zoom-in';
+      thumb.addEventListener('click', ()=> q.datauri && openLightbox(q.datauri));
+      drop.appendChild(thumb);
+      const hint=document.createElement('div'); hint.className='hint';
+      hint.innerHTML = '貼上圖片 (Ctrl/⌘+V)、拖放到此、或 <span class="code">選擇檔案</span>';
+      drop.appendChild(hint);
+      const right=document.createElement('div'); right.className='right';
+      const inputFile=document.createElement('input'); inputFile.type='file'; inputFile.accept='image/*'; inputFile.style.display='none';
+      const btnPick=document.createElement('button'); btnPick.className='btn'; btnPick.textContent='選擇檔案';
+      btnPick.onclick=()=>inputFile.click();
+      const btnClear=document.createElement('button'); btnClear.className='btn'; btnClear.textContent='清除圖片';
+      btnClear.onclick=()=>{ q.datauri=''; render(); };
+      right.appendChild(btnPick); right.appendChild(btnClear);
+      drop.appendChild(right);
+      inputFile.addEventListener('change', async (e)=>{
+        const f=e.target.files && e.target.files[0]; if(!f) return;
+        if(!f.type || !f.type.startsWith('image/')) return alert('僅支援圖片檔');
+        const dataurl = await fileToDataURL(f);
+        q.datauri = dataurl; render();
+      });
+      drop.appendChild(inputFile);
+      attachDropPaste(drop,q);
+      body.appendChild(drop);
+
+      const ul=document.createElement('div'); ul.className='options';
+      q.choices.forEach((c,ci)=>{
+        const opt=document.createElement('div'); opt.className='opt';
+        const keyInput=document.createElement('input'); keyInput.className='input small'; keyInput.value=c.key;
+        keyInput.addEventListener('input', ()=>{ c.key = keyInput.value.trim(); });
+        const txtInput=document.createElement('input'); txtInput.className='input'; txtInput.style.flex='1'; txtInput.value=c.text;
+        txtInput.addEventListener('input', ()=>{ c.text = txtInput.value; });
+        const chkCorrect=document.createElement('input'); chkCorrect.type='checkbox'; chkCorrect.checked=!!c.correct;
+        chkCorrect.addEventListener('change', ()=>{ c.correct = chkCorrect.checked; });
+        const btnDel=document.createElement('button'); btnDel.className='btn'; btnDel.type='button'; btnDel.textContent='刪選項';
+        btnDel.addEventListener('click', ()=>{ saveAnchor(); q.choices.splice(ci,1); render(); restoreAnchor(); });
+        const lbl=document.createElement('label'); lbl.style.display='flex'; lbl.style.alignItems='center'; lbl.style.gap='8px'; lbl.style.width='100%';
+        const corrLabel=document.createElement('span'); corrLabel.textContent='正解';
+        lbl.appendChild(chkCorrect); lbl.appendChild(corrLabel); lbl.appendChild(keyInput); lbl.appendChild(txtInput); lbl.appendChild(btnDel);
+        opt.appendChild(lbl); ul.appendChild(opt);
+      });
+      body.appendChild(ul);
+
+      // 編輯模式也在選項下方呈現一張「閱讀時的擺位」預覽（較小高）
+      if(q.datauri){
+        const imgwrap=document.createElement('div'); imgwrap.className='imgwrap';
+        const img=document.createElement('img'); img.className='img-inline'; img.alt='圖示'; img.src=q.datauri; img.style.cursor='zoom-in';
+        img.addEventListener('click', ()=>openLightbox(q.datauri));
+        const actions=document.createElement('div'); actions.className='img-actions';
+        const btnFull=document.createElement('button'); btnFull.className='btn'; btnFull.textContent='全尺寸檢視';
+        btnFull.onclick=()=>openLightbox(q.datauri);
+        actions.appendChild(btnFull);
+        imgwrap.appendChild(img); imgwrap.appendChild(actions);
+        body.appendChild(imgwrap);
+      }
+
+      const actions=document.createElement('div'); actions.className='actions';
+      const btnAddChoice=document.createElement('button'); btnAddChoice.className='btn'; btnAddChoice.textContent='新增選項';
+      btnAddChoice.addEventListener('click', ()=>{
+        saveAnchor();
+        const newKey = nextChoiceKey(q.choices);
+        q.choices.push({key:newKey, text:'新選項', correct:false}); render(); restoreAnchor();
+      });
+      const btnDelQ=document.createElement('button'); btnDelQ.className='btn'; btnDelQ.textContent='刪除此題';
+      btnDelQ.addEventListener('click', ()=>{ if(confirm('確定刪除此題？')) removeQuestion(q.id); });
+      actions.appendChild(btnAddChoice); actions.appendChild(btnDelQ);
+      body.appendChild(actions);
+
+      row.appendChild(qid); row.appendChild(body); li.appendChild(row); document.getElementById('qs').appendChild(li);
+      return;
+    }
+
+    // ---- VIEW MODES ----
+    const stem=document.createElement('div'); stem.className='stem';
+    // 移除題幹縮圖，改為選項後顯示完整圖（縮放內嵌）
+    const stemText=document.createElement('span'); stemText.textContent=q.text;
+    stem.appendChild(stemText);
+    if(multi){ const chip=document.createElement('span'); chip.className='chip'; chip.textContent='複選'; stem.appendChild(chip); }
+    body.appendChild(stem);
+    const ul=document.createElement('div'); ul.className='options';
+
+    q.choices.forEach(c=>{
+      const isSel=sel.has(c.key);
+      const opt=document.createElement('div'); opt.className='opt';
+      if(revealCorrect && c.correct) opt.classList.add('good');
+      else if((locked[q.id] || finished) && isSel && !c.correct) opt.classList.add('bad');
+      const label=document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='10px'; label.style.width='100%';
+      const input=document.createElement('input'); input.type=multi?'checkbox':'radio'; input.name='q-'+q.id; input.checked=isSel;
+      if(revealCorrect || locked[q.id] || finished) input.disabled=true;
+      input.addEventListener('change', ()=>{
+        if(revealCorrect || locked[q.id] || finished) return;
+        const cur=new Set(answers[q.id]||[]);
+        if(multi){ if(cur.has(c.key)) cur.delete(c.key); else cur.add(c.key); }
+        else { cur.clear(); cur.add(c.key); }
+        answers[q.id] = Array.from(cur);
+        if(mode==='practice'){
+          if(!multi || (cur.size === correct.size)){
+            locked[q.id] = true;
+          }
+        }
+        render();
+      });
+      const mono=document.createElement('span'); mono.className='mono'; mono.textContent=c.key+'.';
+      const txt=document.createElement('span'); txt.textContent=c.text;
+      label.appendChild(input); label.appendChild(mono); label.appendChild(txt);
+      opt.appendChild(label); ul.appendChild(opt);
+    });
+
+    body.appendChild(ul);
+
+    // 新增：選項後方顯示圖片 + 全尺寸檢視
+    if(q.datauri){
+      const imgwrap=document.createElement('div'); imgwrap.className='imgwrap';
+      const img=document.createElement('img'); img.className='img-inline'; img.alt='圖示'; img.src=q.datauri; img.style.cursor='zoom-in';
+      img.addEventListener('click', ()=>openLightbox(q.datauri));
+      const actions=document.createElement('div'); actions.className='img-actions';
+      const btnFull=document.createElement('button'); btnFull.className='btn'; btnFull.textContent='全尺寸檢視';
+      btnFull.onclick=()=>openLightbox(q.datauri);
+      actions.appendChild(btnFull);
+      imgwrap.appendChild(img); imgwrap.appendChild(actions);
+      body.appendChild(imgwrap);
+    }
+
+    const foot=document.createElement('div'); foot.className='foot';
+    if(mode!=='read' && (locked[q.id] || finished)){
+      const pill=document.createElement('span'); 
+      const isCorrect = equals(sel, correct);
+      pill.className = isCorrect ? 'pill-ok' : 'pill-ng';
+      pill.textContent = isCorrect ? '作答正確' : '作答錯誤';
+      foot.appendChild(pill);
+    }
+    body.appendChild(foot);
+
+    row.appendChild(qid); row.appendChild(body); li.appendChild(row); document.getElementById('qs').appendChild(li);
+  });
+}
+
+// ---- Events ----
+document.getElementById('mode-read').onclick=()=>setMode('read');
+document.getElementById('mode-practice').onclick=()=>setMode('practice');
+document.getElementById('mode-exam').onclick=()=>setMode('exam');
+document.getElementById('mode-edit').onclick=()=>setMode('edit');
+document.getElementById('mode-finish').onclick=()=>{ finished=true; freeze=true; render(); };
+document.getElementById('mode-theme').onclick=()=>toggleTheme();
+
+// In ALL modes: after toggling order, scroll to TOP
+document.getElementById('btn-random').onclick=()=>{
+  if(freeze) return;
+  random=true; recomputeOrder(); render();
+  window.scrollTo({top:0, behavior:'instant'});
+};
+document.getElementById('btn-ordered').onclick=()=>{
+  if(freeze) return;
+  random=false; recomputeOrder(); render();
+  window.scrollTo({top:0, behavior:'instant'});
+};
+
+document.getElementById('btn-clear').onclick=()=>{ saveAnchor(); answers={}; locked={}; finished=false; freeze=false; render(); restoreAnchor(); };
+
+// ---- Export (include datauri & multi) ----
+document.getElementById('btn-export').onclick=()=>{
+  const normalized = questions.map(q=>{
+    const correctCount = q.choices.filter(c=>c.correct).length;
+    const multi = !!q.multi || correctCount > 1;
+    return {
+      id: q.id,
+      text: q.text,
+      datauri: q.datauri || '',
+      multi: multi,
+      choices: q.choices.map(c=>({ key: c.key, text: c.text, correct: !!c.correct }))
+    };
+  });
+  const blob=new Blob([JSON.stringify(normalized,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='questions.json'; a.click(); URL.revokeObjectURL(url);
+};
+
+document.getElementById('btn-import').onclick=()=>{ document.getElementById('file').click(); };
+document.getElementById('file').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const arr=JSON.parse(r.result);
+      if(!Array.isArray(arr)) throw new Error();
+      arr.forEach(q=>{ if(!('datauri' in q)) q.datauri=''; });
+      saveAnchor();
+      questions=arr; answers={}; locked={}; finished=false; freeze=false; viewIds=[]; recomputeOrder(); render(); restoreAnchor();
+    }catch(err){ alert('匯入失敗：格式錯誤'); }
+  };
+  r.readAsText(f);
+});
+document.getElementById('btn-add').onclick=()=>{ if(mode==='edit') addQuestion(); };
+
+// ---- Init ----
+applyTheme(localStorage.getItem(LS_THEME_KEY)||'light');
+function setModeInitial(){ setMode('read'); }
+setModeInitial();
+random = false;
+recomputeOrder();
+render();
+adjustMainOffset();
+})()
+</script>
+</body>
+</html>
