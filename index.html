@@ -3,17 +3,19 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>QuizDeck.v250922</title>
+<title>QuizDeck.v250923</title>
 <style>
 :root{
   --bg:#f8fafc;--fg:#0f172a;--muted:#64748b;--card:#ffffff;--border:#e2e8f0;--accent:#0ea5e9;
   --good-bg:#f0fdf4;--good-bd:#86efac;--good-fg:#166534;
   --bad-bg:#fff1f2;--bad-bd:#fecaca;--bad-fg:#991b1b;
+  --memo-bg:#fff7ed; --memo-bd:#fed7aa; --memo-fg:#7c2d12;
 }
 .dark{
   --bg:#0b1220;--fg:#e6edf3;--muted:#94a3b8;--card:#111827;--border:#243244;--accent:#38bdf8;
   --good-bg:#052e1a;--good-bd:#16a34a;--good-fg:#86efac;
   --bad-bg:#2a0e12;--bad-bd:#ef4444;--bad-fg:#fecaca;
+  --memo-bg:#1f2937; --memo-bd:#374151; --memo-fg:#e5e7eb;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -44,6 +46,12 @@ ul.qs{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:
 .imgwrap{margin-top:12px;display:flex;flex-direction:column;gap:8px}
 .img-inline{max-width:100%;max-height:360px;border:1px solid var(--border);background:var(--card);border-radius:12px;object-fit:contain}
 .img-actions{display:flex;gap:8px;align-items:center}
+/* Memo block */
+.memo-view{margin-top:10px;border:1px solid var(--memo-bd);background:var(--memo-bg);color:var(--memo-fg);border-radius:12px;padding:10px}
+.memo-title{font-weight:700;margin-bottom:6px}
+.memo-body{white-space:pre-wrap;line-height:1.6}
+.memo-edit{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.textarea{padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);resize:vertical;min-height:96px;width:100%}
 .foot{margin-top:10px;display:flex;gap:8px;align-items:center;font-size:14px;flex-wrap:wrap}
 .pill-ok{font-size:12px;border:1px solid var(--good-bd);color:var(--good-fg);background:var(--good-bg);padding:2px 8px;border-radius:8px}
 .pill-ng{font-size:12px;border:1px solid var(--bad-bd);color:var(--bad-fg);background:var(--bad-bg);padding:2px 8px;border-radius:8px}
@@ -56,7 +64,7 @@ ul.qs{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:
 .drop .hint{font-size:12px;color:var(--muted)}
 .drop .right{margin-left:auto;display:flex;gap:8px}
 .code{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-size:12px;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:8px;padding:2px 6px}
-input,button{font:inherit;color:inherit}
+input,button,textarea{font:inherit;color:inherit}
 main{padding:12px 16px}
 
 /* Lightbox */
@@ -70,7 +78,7 @@ main{padding:12px 16px}
 <body>
 <header>
   <div class="container" style="display:flex;align-items:center;gap:8px;">
-    <div class="title">📘 QuizDeck.v250922</div>
+    <div class="title">📘 QuizDeck.v250923</div>
     <div style="margin-left:auto"></div>
     <button class="btn" id="mode-read">閱讀模式</button>
     <button class="btn" id="mode-practice">練習模式</button>
@@ -198,7 +206,7 @@ function addQuestion(){
   saveAnchor();
   const maxId = questions.reduce((m,q)=>Math.max(m, Number(q.id)||0), 0);
   const newId = maxId + 1;
-  questions.push({id:newId, text:"新題目", datauri:"", choices:[{key:"A",text:"選項1",correct:true},{key:"B",text:"選項2"}], multi:false});
+  questions.push({id:newId, text:"新題目", datauri:"", memo:"", choices:[{key:"A",text:"選項1",correct:true},{key:"B",text:"選項2"}], multi:false});
   viewIds=[]; recomputeOrder(); render(); restoreAnchor();
 }
 function removeQuestion(qid){
@@ -264,6 +272,7 @@ function render(){
   const ds=dataset();
   const qs=document.getElementById('qs'); qs.innerHTML='';
   ds.forEach((q,idx)=>{
+    if(!('memo' in q)) q.memo = ""; // backfill
     const correct=new Set(q.choices.filter(c=>c.correct).map(c=>c.key));
     const multi=q.multi || correct.size>1;
     const sel=new Set(answers[q.id]||[]);
@@ -271,12 +280,11 @@ function render(){
     const revealCorrect = (mode==='read') || finished || (mode==='practice' && done);
     const li=document.createElement('li'); li.className='card'; li.dataset.qid=q.id;
     const row=document.createElement('div'); row.className='row';
-    const qid=document.createElement('div'); qid.className='qid'; qid.textContent='#'+(idx+1);
+    const qidEl=document.createElement('div'); qidEl.className='qid'; qidEl.textContent='#'+(idx+1);
     const body=document.createElement('div'); body.style.flex='1';
 
     if(mode==='edit'){
       const stem=document.createElement('div'); stem.className='stem';
-      // 編輯模式保留大縮圖在題幹旁，方便編輯
       if(q.datauri){
         const img = document.createElement('img'); img.src=q.datauri; img.alt='thumb'; img.className='thumb-lg';
         img.style.cursor='zoom-in';
@@ -338,7 +346,16 @@ function render(){
       });
       body.appendChild(ul);
 
-      // 編輯模式也在選項下方呈現一張「閱讀時的擺位」預覽（較小高）
+      // 編輯：Memo 編輯區
+      const memoWrap=document.createElement('div'); memoWrap.className='memo-edit';
+      const memoLabel=document.createElement('label'); memoLabel.textContent='Memo / 備註（僅閱讀模式顯示）';
+      const memoTa=document.createElement('textarea'); memoTa.className='textarea'; memoTa.value=q.memo||'';
+      memoTa.placeholder='在這裡輸入這題的備註、解題思路、關鍵字...';
+      memoTa.addEventListener('input', ()=>{ q.memo = memoTa.value; });
+      memoWrap.appendChild(memoLabel); memoWrap.appendChild(memoTa);
+      body.appendChild(memoWrap);
+
+      // 預覽：選項下方的圖與 Memo（模擬閱讀效果）
       if(q.datauri){
         const imgwrap=document.createElement('div'); imgwrap.className='imgwrap';
         const img=document.createElement('img'); img.className='img-inline'; img.alt='圖示'; img.src=q.datauri; img.style.cursor='zoom-in';
@@ -349,6 +366,14 @@ function render(){
         actions.appendChild(btnFull);
         imgwrap.appendChild(img); imgwrap.appendChild(actions);
         body.appendChild(imgwrap);
+      }
+      // 閱讀時的 Memo 預覽
+      if((q.memo||'').trim()){
+        const mv=document.createElement('div'); mv.className='memo-view';
+        const t=document.createElement('div'); t.className='memo-title'; t.textContent='Memo';
+        const b=document.createElement('div'); b.className='memo-body'; b.textContent=q.memo;
+        mv.appendChild(t); mv.appendChild(b);
+        body.appendChild(mv);
       }
 
       const actions=document.createElement('div'); actions.className='actions';
@@ -363,13 +388,12 @@ function render(){
       actions.appendChild(btnAddChoice); actions.appendChild(btnDelQ);
       body.appendChild(actions);
 
-      row.appendChild(qid); row.appendChild(body); li.appendChild(row); document.getElementById('qs').appendChild(li);
+      row.appendChild(qidEl); row.appendChild(body); li.appendChild(row); document.getElementById('qs').appendChild(li);
       return;
     }
 
     // ---- VIEW MODES ----
     const stem=document.createElement('div'); stem.className='stem';
-    // 移除題幹縮圖，改為選項後顯示完整圖（縮放內嵌）
     const stemText=document.createElement('span'); stemText.textContent=q.text;
     stem.appendChild(stemText);
     if(multi){ const chip=document.createElement('span'); chip.className='chip'; chip.textContent='複選'; stem.appendChild(chip); }
@@ -405,7 +429,7 @@ function render(){
 
     body.appendChild(ul);
 
-    // 新增：選項後方顯示圖片 + 全尺寸檢視
+    // 選項下方顯示圖片
     if(q.datauri){
       const imgwrap=document.createElement('div'); imgwrap.className='imgwrap';
       const img=document.createElement('img'); img.className='img-inline'; img.alt='圖示'; img.src=q.datauri; img.style.cursor='zoom-in';
@@ -418,6 +442,15 @@ function render(){
       body.appendChild(imgwrap);
     }
 
+    // 閱讀模式可看到 Memo；練習/模考隱藏
+    if(mode==='read' && (q.memo||'').trim()){
+      const mv=document.createElement('div'); mv.className='memo-view';
+      const t=document.createElement('div'); t.className='memo-title'; t.textContent='Memo';
+      const b=document.createElement('div'); b.className='memo-body'; b.textContent=q.memo;
+      mv.appendChild(t); mv.appendChild(b);
+      body.appendChild(mv);
+    }
+
     const foot=document.createElement('div'); foot.className='foot';
     if(mode!=='read' && (locked[q.id] || finished)){
       const pill=document.createElement('span'); 
@@ -428,7 +461,7 @@ function render(){
     }
     body.appendChild(foot);
 
-    row.appendChild(qid); row.appendChild(body); li.appendChild(row); document.getElementById('qs').appendChild(li);
+    row.appendChild(qidEl); row.appendChild(body); li.appendChild(row); document.getElementById('qs').appendChild(li);
   });
 }
 
@@ -454,7 +487,7 @@ document.getElementById('btn-ordered').onclick=()=>{
 
 document.getElementById('btn-clear').onclick=()=>{ saveAnchor(); answers={}; locked={}; finished=false; freeze=false; render(); restoreAnchor(); };
 
-// ---- Export (include datauri & multi) ----
+// ---- Export (include datauri & multi & memo) ----
 document.getElementById('btn-export').onclick=()=>{
   const normalized = questions.map(q=>{
     const correctCount = q.choices.filter(c=>c.correct).length;
@@ -463,6 +496,7 @@ document.getElementById('btn-export').onclick=()=>{
       id: q.id,
       text: q.text,
       datauri: q.datauri || '',
+      memo: q.memo || '',
       multi: multi,
       choices: q.choices.map(c=>({ key: c.key, text: c.text, correct: !!c.correct }))
     };
@@ -479,7 +513,7 @@ document.getElementById('file').addEventListener('change', e=>{
     try{
       const arr=JSON.parse(r.result);
       if(!Array.isArray(arr)) throw new Error();
-      arr.forEach(q=>{ if(!('datauri' in q)) q.datauri=''; });
+      arr.forEach(q=>{ if(!('datauri' in q)) q.datauri=''; if(!('memo' in q)) q.memo=''; });
       saveAnchor();
       questions=arr; answers={}; locked={}; finished=false; freeze=false; viewIds=[]; recomputeOrder(); render(); restoreAnchor();
     }catch(err){ alert('匯入失敗：格式錯誤'); }
